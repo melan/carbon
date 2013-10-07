@@ -64,7 +64,7 @@ class ConsistentHashingRouter(DatapointRouter):
     key = self.getKey(metric)
 
     used_servers = set()
-    for (server, instance) in self.ring.get_nodes(key):
+    for (server, instance) in self.ring.get_nodes(key, self.replication_factor):
       if server in used_servers:
         continue
       else:
