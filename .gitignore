@@ -3,3 +3,8 @@ build
 dist
 *.log
 *.pyc
+.project
+.pydevproject
+conf/*.conf
+lib/twisted/plugins/dropin.cache
+storage/*

@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""Copyright 2008 Orbitz WorldWide
+"""Copyright 2013 Bryan Irvine
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ import time
 import socket
 import platform
 import subprocess
+import pickle
+import struct
 
 CARBON_SERVER = '127.0.0.1'
-CARBON_PORT = 2013
+CARBON_PICKLE_PORT = 2004
 DELAY = 60
-COUNT = 1
 
 def get_loadavg():
     """
@@ -40,49 +41,48 @@ def get_loadavg():
         output = re.split("[\s,]+", stdout)
         return output[-3:]
 
-def run(sock, delay, count):
+def run(sock, delay):
     """Make the client go go go"""
     while True:
         now = int(time.time())
+        tuples = ([])
         lines = []
         #We're gonna report all three loadavg values
         loadavg = get_loadavg()
-        for cnt in range(0, count):
-            lines.append("system.loadavg_%d_1min %s %d" % (cnt, loadavg[0], now))
-            lines.append("system.loadavg_%d_5min %s %d" % (cnt, loadavg[1], now))
-            lines.append("system.loadavg_%d_15min %s %d" % (cnt, loadavg[2], now))
-            message = '\n'.join(lines) + '\n' #all lines must end in a newline
-#            print "sending message"
-#            print '-' * 80
-#            print message
-            sock.sendall(message)
+        tuples.append(('system.loadavg_1min', (now,loadavg[0])))
+        tuples.append(('system.loadavg_5min', (now,loadavg[1])))
+        tuples.append(('system.loadavg_15min', (now,loadavg[2])))
+        lines.append("system.loadavg_1min %s %d" % (loadavg[0], now))
+        lines.append("system.loadavg_5min %s %d" % (loadavg[1], now))
+        lines.append("system.loadavg_15min %s %d" % (loadavg[2], now))
+        message = '\n'.join(lines) + '\n' #all lines must end in a newline
+        print "sending message"
+        print '-' * 80
+        print message
+        package = pickle.dumps(tuples, 1)
+        size = struct.pack('!L', len(package))
+        sock.sendall(size)
+        sock.sendall(package)
         time.sleep(delay)
 
 def main():
     """Wrap it all up together"""
     delay = DELAY
-    count = COUNT
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         if arg.isdigit():
             delay = int(arg)
         else:
             sys.stderr.write("Ignoring non-integer argument. Using default: %ss\n" % delay)
-    if len(sys.argv) > 2:
-        arg = sys.argv[2]
-        if arg.isdigit():
-            count = int(arg)
-        else:
-            sys.stderr.write("Ignoring non-integer argument. Using default: %ss\n" % count)
 
     sock = socket.socket()
     try:
-        sock.connect( (CARBON_SERVER, CARBON_PORT) )
+        sock.connect( (CARBON_SERVER, CARBON_PICKLE_PORT) )
     except socket.error:
-        raise SystemExit("Couldn't connect to %(server)s on port %(port)d, is carbon-cache.py running?" % { 'server':CARBON_SERVER, 'port':CARBON_PORT })
+        raise SystemExit("Couldn't connect to %(server)s on port %(port)d, is carbon-cache.py running?" % { 'server':CARBON_SERVER, 'port':CARBON_PICKLE_PORT })
 
     try:
-        run(sock, delay, count)
+        run(sock, delay)
     except KeyboardInterrupt:
         sys.stderr.write("\nExiting on CTRL-c\n")
         sys.exit(0)
