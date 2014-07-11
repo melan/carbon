@@ -44,6 +44,7 @@ def run(sock, delay, count):
     """Make the client go go go"""
     while True:
         now = int(time.time())
+        print "Now = %d" % now
         lines = []
         #We're gonna report all three loadavg values
         loadavg = get_loadavg()
@@ -51,12 +52,13 @@ def run(sock, delay, count):
             lines.append("system.loadavg_%d_1min %s %d" % (cnt, loadavg[0], now))
             lines.append("system.loadavg_%d_5min %s %d" % (cnt, loadavg[1], now))
             lines.append("system.loadavg_%d_15min %s %d" % (cnt, loadavg[2], now))
-            message = '\n'.join(lines) + '\n' #all lines must end in a newline
-#            print "sending message"
-#            print '-' * 80
-#            print message
-            sock.sendall(message)
-        time.sleep(delay)
+        message = '\n'.join(lines) + '\n' #all lines must end in a newline
+#        print "sending message"
+#        print '-' * 80
+#        print message
+        sock.sendall(message)
+        d = delay - (int(time.time()) - now)
+        time.sleep(d if d > 0 else 0)
 
 def main():
     """Wrap it all up together"""
