@@ -27,6 +27,7 @@ metricGenerated = Event('metricGenerated')
 cacheFull = Event('cacheFull')
 cacheSpaceAvailable = Event('cacheSpaceAvailable')
 pauseReceivingMetrics = Event('pauseReceivingMetrics')
+mayPauseReceivingMetrics = Event('mayPauseReceivingMetrics')
 resumeReceivingMetrics = Event('resumeReceivingMetrics')
 
 # Default handlers

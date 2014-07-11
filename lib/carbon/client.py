@@ -7,9 +7,12 @@ from carbon.conf import settings
 from carbon.util import pickle
 from carbon import log, state, events, instrumentation
 from collections import deque
+from threading import Lock
 
 
 SEND_QUEUE_LOW_WATERMARK = settings.MAX_QUEUE_SIZE * 0.8
+SEND_QUEUE_DROP_THRESHOLD = settings.MAX_QUEUE_SIZE * 1.5
+MAX_OVERFLOWED_DECIMAL = 0.3
 TIME_TO_DEFER_SENDING = 0.0001
 
 
@@ -152,12 +155,14 @@ class CarbonClientFactory(ReconnectingClientFactory):
     self.deferSendPending = False
 
   def queueFullCallback(self, result):
+    OVERFLOWS.add(self.destination)
     state.events.cacheFull()
     log.clients('%s send queue is full (%d datapoints)' % (self, result))
     
   def queueSpaceCallback(self, result):
+    OVERFLOWS.remove(self.destination)
     if self.queueFull.called:
-      log.clients('%s send queue has space available' % self.connectedProtocol)
+      log.clients('%s send queue has space available (%d datapoints)' % (self.connectedProtocol, result))
       self.queueFull = Deferred()
       self.queueFull.addCallback(self.queueFullCallback)
       state.events.cacheSpaceAvailable()
@@ -230,9 +235,11 @@ class CarbonClientFactory(ReconnectingClientFactory):
     if self.queueSize >= settings.MAX_QUEUE_SIZE:
       if not self.queueFull.called:
         self.queueFull.callback(self.queueSize)
-      instrumentation.increment(self.fullQueueDrops)
-    else:
-      self.enqueue(metric, datapoint)
+      if self.queueSize >= SEND_QUEUE_DROP_THRESHOLD:
+        # we are dropping metrics on the floor at this point
+        instrumentation.increment(self.fullQueueDrops)
+        return
+    self.enqueue(metric, datapoint)
 
     if self.connectedProtocol:
       if not self.deferSendPending: 
@@ -286,9 +293,11 @@ class CarbonClientManager(Service):
     for factory in self.client_factories.values():
       if not factory.started:
         factory.startConnecting()
+    events.mayPauseReceivingMetrics.addHandler(self.mayPauseReceiving)
 
   def stopService(self):
     Service.stopService(self)
+    events.mayPauseReceivingMetrics.removeHandler(self.mayPauseReceiving)
     self.stopAllClients()
 
   def startClient(self, destination):
@@ -335,3 +344,40 @@ class CarbonClientManager(Service):
 
   def __str__(self):
     return "<%s[%x]>" % (self.__class__.__name__, id(self))
+
+  def mayPauseReceiving(self):
+    overflowCount = OVERFLOWS.count()
+    totalCount = len(self.client_factories)
+    # If we exceeded the max allowed percentage (decimal) pause receiving data
+    if overflowCount > totalCount * MAX_OVERFLOWED_DECIMAL:
+      events.pauseReceivingMetrics()
+      
+class OverflowCounter:
+  def __init__(self):
+    self.lock = Lock()
+    self.keys = set()
+    
+  def add(self, destination):
+    self.lock.acquire()
+    try:
+      self.keys.add(destination)
+    finally:
+      self.lock.release()
+    
+  def remove(self, destination):
+    self.lock.acquire()
+    try:
+      self.keys.remove(destination)
+    finally:
+      self.lock.release()
+
+  def count(self):
+    self.lock.acquire()
+    try:
+      return len(self.keys)
+    finally:
+      self.lock.release()
+
+# Singleton
+OVERFLOWS = OverflowCounter()
+              

@@ -194,4 +194,8 @@ def createRelayService(config):
     for destination in util.parseDestinations(settings.DESTINATIONS):
       client_manager.startClient(destination)
 
+    if settings.USE_FLOW_CONTROL:
+      events.cacheFull.addHandler(events.mayPauseReceivingMetrics)
+      events.cacheSpaceAvailable.addHandler(events.resumeReceivingMetrics)
+      
     return root_service
