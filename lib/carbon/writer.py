@@ -66,6 +66,7 @@ def optimalWriteOrder():
         # when a bunch of new metrics are received.
         try:
           MetricCache.pop(metric)
+          instrumentation.increment('new_metrics_dropped')
         except KeyError:
           pass
 
@@ -144,6 +145,7 @@ def writeCachedDataPoints():
           updates = 0
         else:
           updates += 1
+          instrumentation.increment('updates_per_second')
           if updates >= settings.MAX_UPDATES_PER_SECOND:
             time.sleep( int(t2 + 1) - t2 )
 
