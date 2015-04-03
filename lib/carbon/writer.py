@@ -115,7 +115,8 @@ def writeCachedDataPoints():
 
         log.creates("creating database file %s (archive=%s xff=%s agg=%s)" % 
                     (dbFilePath, archiveConfig, xFilesFactor, aggregationMethod))
-        whisper.create(dbFilePath, archiveConfig, xFilesFactor, aggregationMethod, settings.WHISPER_SPARSE_CREATE)
+        whisper.create(dbFilePath, archiveConfig, xFilesFactor=xFilesFactor, aggregationMethod=aggregationMethod,
+                       sparse=settings.WHISPER_SPARSE_CREATE)
         os.chmod(dbFilePath, 0755)
         instrumentation.increment('creates')
 
